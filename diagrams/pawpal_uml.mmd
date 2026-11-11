@@ -1,0 +1,76 @@
+classDiagram
+    class Owner {
+        +String name
+        +List~Pet~ pets
+        +Dict~String,int~ constraints
+        +addPet(Pet pet)
+        +getAllTasks() List~Task~
+    }
+
+    class Task {
+        +String name
+        +String description
+        +int duration
+        +Priority priority
+        +String preferredTime
+        +Frequency frequency
+        +bool completionStatus
+        +String petName
+        +Date dueDate
+        +String startTime
+        +startMinutes() int
+        +markComplete()
+        +nextOccurrence() Task
+    }
+
+    class Priority {
+        <<enumeration>>
+        HIGH
+        MEDIUM
+        LOW
+    }
+
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+    }
+
+    class Pet {
+        +String name
+        +String species
+        +List~Task~ tasks
+        +createTask(Task task)
+        +editTask(String taskName, changes)
+        +removeTask(String taskName)
+        +completeTask(String taskName) Task
+    }
+
+    class Scheduler {
+        +Owner owner
+        +Dict~String,List~Task~~ plan
+        +String explanationOfPlan
+        +Dict~Tuple~String,String~,String~ skippedTasks
+        +Dict~Tuple~String,String~,String~ placementReasons
+        +generateDailyPlan(Date planDate)
+        +generateExplanationOfPlan()
+        +sortByTime(List~Task~ tasks) List~Task~
+        +filterTasks(String petName, bool completed) List~Task~
+        +markTaskComplete(String petName, String taskName) Task
+        +detectConflicts() List~String~
+        -timeRange(Task task) String
+    }
+
+    note for Owner "constraints keys and Task.preferredTime must be one of TIME_BLOCKS: morning, afternoon, evening"
+
+    Pet "1" --> "*" Task : has
+    Task --> Priority
+    Task --> Frequency
+    Owner "1" --> "*" Pet : has
+    Scheduler "1" --> "1" Owner : reads from
+    Scheduler "1" --> "*" Task : plans
+    Scheduler ..> Pet : markTaskComplete delegates
+    Pet ..> Task : completeTask creates next
+    Task ..> Task : nextOccurrence creates copy
+    Owner ..> Task : getAllTasks
