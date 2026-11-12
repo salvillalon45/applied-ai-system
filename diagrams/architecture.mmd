@@ -1,0 +1,80 @@
+flowchart TD
+    %% ---------- Input ----------
+    User([Owner / User])
+    CLI[CLI<br/>main.py]
+    InGuard{{Input guardrails<br/>empty / too long / off-topic}}
+
+    User -->|plain-English request| CLI
+    CLI --> InGuard
+    InGuard -->|rejected| CLI
+
+    %% ---------- Agent ----------
+    subgraph AGENT["Agent  (agent/agent.py)"]
+        direction TB
+        Loop[Orchestrator loop<br/>max N iterations]
+        LLM[[Claude API<br/>PLAN: choose tool calls]]
+        Exec[Tool executor<br/>whitelisted tools only]
+        Loop -->|messages + tool schemas| LLM
+        LLM -->|tool_use| Exec
+        Exec -->|tool_result or error| Loop
+    end
+
+    InGuard -->|accepted| Loop
+
+    %% ---------- Core ----------
+    subgraph CORE["PawPal+ core  (pawpal_system.py, unchanged)"]
+        direction TB
+        Draft[(Draft copy of Owner<br/>pets, tasks, constraints)]
+        Sched[Scheduler<br/>generate_daily_plan<br/>detect_conflicts]
+        Draft --> Sched
+    end
+
+    Exec -->|ACT: add_pet / create_task /<br/>edit_task / generate_plan| Draft
+    Draft -.->|ValueError / KeyError| Exec
+
+    %% ---------- Check ----------
+    Verify{{Verifier<br/>agent/checks.py<br/>deterministic, no LLM}}
+    Sched -->|plan + skipped tasks| Verify
+    Verify -->|CHECK: errors found,<br/>fed back to Claude| Loop
+    Verify -->|plan is valid| Review
+
+    %% ---------- Human in the loop ----------
+    Review[/Proposed plan + explanation<br/>+ warnings/]
+    Human{Human approval<br/>y / n / revise}
+    Review --> Human
+    Human -->|revise: feedback text| Loop
+    Human -->|reject| Discard[Discard draft]
+    Human -->|approve| Commit[Commit draft to<br/>real Owner data]
+    Commit --> Output([Final daily plan<br/>shown to user])
+
+    %% ---------- Logging ----------
+    Log[(Structured log<br/>logs/agent.log)]
+    Loop -.-> Log
+    Exec -.-> Log
+    Verify -.-> Log
+    Human -.-> Log
+
+    %% ---------- Reliability harness ----------
+    subgraph EVAL["Reliability harness  (eval/)"]
+        direction TB
+        Cases[/Test cases<br/>request + expected outcome/]
+        Mock[[Mock LLM<br/>scripted tool calls]]
+        Runner[Eval runner<br/>pass / fail per case]
+        Report[/Results table<br/>README + model_card.md/]
+        Cases --> Runner
+        Runner --> Report
+    end
+
+    Runner -->|runs agent with| Loop
+    Mock -.->|replaces Claude API<br/>in offline runs| LLM
+    Verify -.->|same checks reused| Runner
+
+    %% ---------- Styling ----------
+    classDef human fill:#fde68a,stroke:#b45309,color:#000
+    classDef ai fill:#bfdbfe,stroke:#1d4ed8,color:#000
+    classDef guard fill:#fecaca,stroke:#b91c1c,color:#000
+    classDef test fill:#bbf7d0,stroke:#15803d,color:#000
+    class User,Human,Review human
+    class LLM ai
+    class InGuard,Verify guard
+    class Cases,Mock,Runner,Report test
