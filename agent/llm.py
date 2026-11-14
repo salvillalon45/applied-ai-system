@@ -32,7 +32,7 @@ DEFAULT_MODEL = "claude-opus-5-5"  # override with the PAWPAL_MODEL env var
 DEFAULT_EFFORT = "medium"  # low | medium | high | xhigh | max
 MAX_TOKENS = 16000
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"  # override with the GEMINI_MODEL env var
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"  # override with the GEMINI_MODEL env var
 RETRY_DELAYS = (2, 6, 15)  # seconds to wait before each retry on 429 / 5xx
 
 
