@@ -18,6 +18,7 @@ BLOCK_OVERFLOW = "block_overflow"
 PRIORITY_INVERSION = "priority_inversion"
 DROPPED_TASK = "dropped_task"
 DUPLICATE_PLACEMENT = "duplicate_placement"
+UNSCHEDULED_TASK = "unscheduled_task"
 
 # Severities: "error" means the plan is invalid, "warning" means it is valid but poor.
 ERROR = "error"
@@ -193,6 +194,47 @@ def check_no_dropped_tasks(
     return issues
 
 
+def check_unscheduled_tasks(
+    scheduler: Scheduler, plan_date: Optional[date] = None
+) -> List[CheckIssue]:
+    """Report due tasks the scheduler skipped, so they are not in the plan.
+
+    check_no_dropped_tasks only proves a skipped task is *listed*. That is not
+    enough: a 60 minute walk with 30 free minutes is skipped, listed, and the plan
+    still "passes" while the owner's request is missing from it. A plan that omits
+    something the owner asked for is not ready for approval.
+
+    The fix is never to shorten the task or cut the owner's stated availability
+    (the system prompt forbids both), so the agent has to ask the owner.
+    """
+    tasks_by_key = {}
+    for task in scheduler.filter_tasks(completed=False):
+        tasks_by_key[(task.pet_name, task.name)] = task
+
+    issues = []
+    for key, reason in scheduler.skipped_tasks.items():
+        task = tasks_by_key.get(key)
+        if task is None:
+            continue
+        if plan_date is not None and task.due_date > plan_date:
+            continue
+        issues.append(
+            CheckIssue(
+                code=UNSCHEDULED_TASK,
+                severity=ERROR,
+                message=(
+                    f"'{task.name}' for {task.pet_name} ({task.duration} min) is NOT in "
+                    f"the plan: {reason}. Do not shorten it or change the owner's stated "
+                    f"availability. Move it to another time block if one has room, "
+                    f"otherwise ask the owner how to proceed."
+                ),
+                pet_name=task.pet_name,
+                task_name=task.name,
+            )
+        )
+    return issues
+
+
 def check_no_duplicate_placements(scheduler: Scheduler) -> List[CheckIssue]:
     """Report any task that appears more than once across the plan blocks."""
     counts: Dict[Tuple[str, str], int] = {}
@@ -226,5 +268,6 @@ def run_checks(scheduler: Scheduler, plan_date: Optional[date] = None) -> CheckR
     report.issues.extend(check_block_overflow(scheduler))
     report.issues.extend(check_no_dropped_tasks(scheduler, plan_date))
     report.issues.extend(check_no_duplicate_placements(scheduler))
+    report.issues.extend(check_unscheduled_tasks(scheduler, plan_date))
     report.issues.extend(check_priority_inversion(scheduler))
     return report

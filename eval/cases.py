@@ -130,11 +130,13 @@ def _injection() -> List:
 
 
 def _over_capacity() -> List:
-    return [
+    steps = [
         tool_use_response(("create_task", _task("long walk", 60))),
-        tool_use_response(("generate_plan", {})),
-        text_response("Added the 60 minute walk."),
+        tool_use_response(("generate_plan", {})),  # verifier: unscheduled_task error
     ]
+    for _ in range(MAX_NUDGES + 1):
+        steps.append(text_response("It doesn't fit. Should I shorten it or add free time?"))
+    return steps
 
 
 def _runaway() -> List:
@@ -216,11 +218,16 @@ def build_cases() -> List[Case]:
         ),
         Case(
             id="over_capacity",
-            description="A task longer than the free time: duration must not be silently cut.",
+            description=(
+                "A task longer than every free block must not be approved, "
+                "and its duration must not be silently cut."
+            ),
             request="Rex needs a 60 minute walk in the morning.",
-            expected=[Status.READY, Status.NEEDS_INPUT, Status.UNRESOLVED],
+            # READY is not allowed: the plan would leave out the owner's walk.
+            expected=[Status.UNRESOLVED],
+            live_expected=[Status.UNRESOLVED, Status.NEEDS_INPUT],
             script=_over_capacity,
-            constraints={"morning": 30},
+            constraints={"morning": 30, "afternoon": 30, "evening": 30},
             expect_durations=[60],
         ),
         Case(

@@ -60,7 +60,10 @@ def check_invariants(case: Case, agent: PlanningAgent, result, before: list, liv
         wanted = []
         for status in allowed:
             wanted.append(status.value)
-        failures.append(f"status {result.status.value}, wanted {' or '.join(wanted)}")
+        note = f"status {result.status.value}, wanted {' or '.join(wanted)}"
+        if result.status == Status.LLM_ERROR:
+            note += f" ({result.message})"  # show why, e.g. a rate limit
+        failures.append(note)
 
     # 2. the real owner must be untouched (commit() was never called)
     if snapshot(agent.owner) != before:
