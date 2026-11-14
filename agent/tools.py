@@ -125,11 +125,24 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
         "name": "generate_plan",
         "description": (
-            "Build the daily plan from the current tasks and availability, then run "
-            "the verifier. Returns the plan plus any problems found. Call this after "
-            "making changes, and fix any ERROR lines before finishing."
+            "Build the daily plan for one date from the current tasks and availability, "
+            "then run the verifier. Only tasks due on or before that date are planned. "
+            "Returns the plan plus any problems found. Call this after making changes, "
+            "and fix any ERROR lines before finishing."
         ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "plan_date": {
+                    "type": "string",
+                    "description": (
+                        "YYYY-MM-DD of the day to plan. Use the day the owner's request "
+                        "is about (e.g. tomorrow's date). Defaults to today."
+                    ),
+                },
+            },
+            "required": [],
+        },
     },
 ]
 
@@ -150,6 +163,7 @@ class ToolExecutor:
         self.scheduler = Scheduler(self.draft)
         self.plan_date: date = plan_date or date.today()
         self.last_report: Optional[CheckReport] = None
+        self.last_plan_date: Optional[date] = None  # the date the last plan was built for
         self.plan_is_current = False  # False once anything changes after generate_plan
         self.changes_made = 0  # count of successful mutations; the agent loop compares it
 
@@ -352,13 +366,33 @@ class ToolExecutor:
         self._mark_changed()
         return f"{args['block']} availability set to {minutes} min"
     
-    def _generate_plan(self, _args: Dict[str, Any]) -> str:
-        """Build the plan, run the verifier, and report both."""
-        self.scheduler.generate_daily_plan(self.plan_date)
+    def _generate_plan(self, args: Dict[str, Any]) -> str:
+        """Build the plan for one date, run the verifier, and report both."""
+        plan_date = self.plan_date
+        if "plan_date" in args:
+            plan_date = self._parse_date(args["plan_date"])
+
+        self.scheduler.generate_daily_plan(plan_date)
         self.scheduler.generate_explanation_of_plan()
-        self.last_report = run_checks(self.scheduler, self.plan_date)
+        self.last_report = run_checks(self.scheduler, plan_date)
+        self.last_plan_date = plan_date
         self.plan_is_current = True
-        return (
-            f"{self.scheduler.explanation_of_plan}\n\n"
+
+        result = (
+            f"Plan for {plan_date:%A %Y-%m-%d}:\n{self.scheduler.explanation_of_plan}\n\n"
             f"Verifier:\n{self.last_report.summary()}"
         )
+
+        # Tasks due after the plan date are left out of the plan on purpose, but an
+        # agent that doesn't notice can approve an empty plan. Say so explicitly.
+        later = []
+        for task in self.draft.get_all_tasks():
+            if not task.completion_status and task.due_date > plan_date:
+                later.append(f"{task.pet_name}: {task.name} (due {task.due_date})")
+        if later:
+            result += (
+                "\n\nNOTE: these tasks are due after this plan date, so they are NOT in "
+                "this plan: " + "; ".join(later) + ". If the owner meant this date, "
+                "call generate_plan again with the right plan_date."
+            )
+        return result

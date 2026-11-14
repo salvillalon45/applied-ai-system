@@ -82,8 +82,8 @@ def test_tools_without_arguments_have_no_parameters_block():
     for declaration in to_gemini_tools(TOOL_SCHEMAS)[0].function_declarations:
         declarations[declaration.name] = declaration
     assert declarations["get_state"].parameters is None
-    assert declarations["generate_plan"].parameters is None
     assert declarations["create_task"].parameters is not None
+    assert declarations["generate_plan"].parameters is not None  # takes optional plan_date
 
 
 def test_nullable_type_and_enum_are_converted():

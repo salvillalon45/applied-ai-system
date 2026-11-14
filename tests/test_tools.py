@@ -239,3 +239,33 @@ def test_change_after_plan_makes_it_stale(executor):
 
 def test_not_ready_before_any_plan(executor):
     assert not executor.ready_for_review
+
+
+# ------------------------------------------------- generate_plan with a date
+
+
+def test_generate_plan_uses_the_requested_date(executor):
+    tomorrow = "2026-11-13"
+    executor.execute("create_task", walk_args(due_date=tomorrow))
+    result = executor.execute("generate_plan", {"plan_date": tomorrow})
+    assert result.ok
+    assert "Plan for Friday 2026-11-13" in result.content
+    assert "walk" in result.content
+    assert executor.last_plan_date == date(2026, 11, 13)
+    assert "NOTE" not in result.content
+
+
+def test_generate_plan_warns_when_tasks_are_due_after_the_plan_date(executor):
+    # the plan date defaults to PLAN_DATE (11-12); the task is due the day after
+    executor.execute("create_task", walk_args(due_date="2026-11-13"))
+    result = executor.execute("generate_plan", {})
+    assert result.ok
+    assert "NOTE" in result.content
+    assert "walk" in result.content.split("NOTE")[1]
+    assert "plan_date" in result.content
+
+
+def test_generate_plan_rejects_a_bad_date(executor):
+    result = executor.execute("generate_plan", {"plan_date": "tomorrow"})
+    assert not result.ok
+    assert "YYYY-MM-DD" in result.content

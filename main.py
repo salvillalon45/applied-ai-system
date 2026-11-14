@@ -1,222 +1,257 @@
-from pawpal_system import Scheduler, Owner, Pet, Task, Priority, Frequency
+"""PawPal+ Planning Agent: command-line interface.
 
-# Sample data is chosen so every scheduler path shows up in the output:
-#   - preferred block used        (meal prep fits in the morning)
-#   - fallback to another block   (walks don't fit in the morning, move to evening)
-#   - too long for any block      (bath 120 min and groom 150 min, longest block is 90)
-#   - fits nowhere                (play fetch: morning and evening are nearly full)
-#   - completed task ignored      (brush teeth)
-#   - priority ordering           (HIGH tasks claim space before MEDIUM/LOW)
+Interactive:
+    python main.py
 
-rex = Pet("Rex")
-rex.create_task(
-    Task(
-        "walk", 
-        "walk Rex in the local park nearby",
-        30,
-        Priority.HIGH,
-        "morning",
-        Frequency.DAILY
-    )
-)
-rex.create_task(
-    Task(
-        "prep meal",
-        "have the meal ready so I can just serve it",
-        20,
-        Priority.HIGH,
-        "morning",
-        Frequency.DAILY
-    )
-)
-rex.create_task(
-    Task(
-        "bath",
-        "give Rex a bath to maintain hygiene", 
-        120,
-        Priority.MEDIUM,
-        "morning",
-        Frequency.WEEKLY
-    )
-)
-rex.create_task(
-    Task(
-        "play fetch", 
-        "play fetch in the backyard",
-        40,
-        Priority.LOW,
-        "morning",
-        Frequency.DAILY
-    )
-)
-rex.create_task(
-    Task(
-        "brush teeth",
-        "brush Rex's teeth",
-        10,
-        Priority.LOW,
-        "morning",
-        Frequency.DAILY,
-        completion_status=True
-    )
-)
+One request, then exit (still asks you to approve unless --auto-approve is given):
+    python main.py --request "Rex needs a 30 minute walk every morning"
 
-buddy = Pet("Buddy")
-buddy.create_task(
-    Task(
-        "walk",
-        "walk Buddy in the local park nearby",
-        30,
-        Priority.HIGH,
-        "morning",
-        Frequency.DAILY
-    )
-)
-buddy.create_task(
-    Task(
-        "prep meal",
-        "have the meal ready so I can just serve it",
-        20,
-        Priority.HIGH,
-        "morning",
-        Frequency.DAILY
-    )
-)
-buddy.create_task(
-    Task(
-        "nail trim",
-        "trim Buddy's nails",
-        15,
-        Priority.MEDIUM,
-        "morning",
-        Frequency.WEEKLY
-    )
-)
-buddy.create_task(
-    Task(
-        "full groom",
-        "full grooming session",
-        150,
-        Priority.MEDIUM,
-        "evening",
-        Frequency.WEEKLY
-    )
-)
+The flow for every request:
+    you type a request -> the agent plans, acts and checks its own work on a DRAFT
+    -> you review the proposed plan -> approve (saved), revise (give feedback) or
+    discard. Nothing is saved to your schedule until you approve.
+"""
 
-constraints = {
-    "morning": 60,
-    "afternoon": 0,
-    "evening": 90,
+import argparse
+import sys
+from datetime import date
+from typing import Callable, Optional
+
+from agent.agent import PlanningAgent, Status, setup_logging
+from agent.llm import LLMClient, LLMError, create_client
+from pawpal_system import TIME_BLOCKS, Owner
+
+DIVIDER = "-" * 70
+
+HELP_TEXT = """Describe what you want in plain English, for example:
+  Rex needs a 30 minute walk every morning and a 20 minute play session in the evening.
+  Add a cat named Mia with a vet visit on Friday at 14:00 for 60 minutes.
+
+Commands:
+  /state   show your saved schedule
+  /new     discard the current draft and start over
+  /help    show this message
+  /quit    leave"""
+
+# What each non-ready outcome looks like to the user.
+STATUS_LABELS = {
+    Status.NEEDS_INPUT: "The agent needs more information",
+    Status.UNRESOLVED: "The agent could not produce a valid plan",
+    Status.MAX_ITERATIONS: "The agent ran out of attempts",
+    Status.REJECTED_INPUT: "Request not accepted",
+    Status.REFUSED: "The model declined this request",
+    Status.LLM_ERROR: "Something went wrong talking to the model",
 }
 
-jerry = Owner("Jerry", [rex, buddy], constraints)
 
-scheduler = Scheduler(jerry)
-scheduler.generate_daily_plan()
-scheduler.generate_explanation_of_plan()
-
-print(scheduler.explanation_of_plan)
-
-
-# --- Sorting and filtering demo ---
-# Tasks are added deliberately out of order (evening first, mixed priorities and
-# durations) so the sorted output differs visibly from the insertion order.
-
-def show(title, tasks):
-    print(f"\n{title}")
-    if not tasks:
-        print("  (none)")
-    for t in tasks:
-        status = "done" if t.completion_status else "todo"
-        start = t.start_time or "no start time"
-        print(
-            f"  - [{status}] {t.pet_name}: {t.name} "
-            f"({t.preferred_time}, {start}, {t.priority.name}, {t.duration} min)"
-        )
+def describe_owner(owner: Owner) -> str:
+    """Text summary of the owner's saved availability, pets and tasks."""
+    lines = ["Available minutes:"]
+    for block in TIME_BLOCKS:
+        lines.append(f"  {block}: {owner.constraints[block]}")
+    if not owner.pets:
+        lines.append("No pets or tasks saved yet.")
+    for pet in owner.pets:
+        lines.append(f"{pet.name} ({pet.species}):")
+        if not pet.tasks:
+            lines.append("  (no tasks)")
+        for task in pet.tasks:
+            start = f" at {task.start_time}" if task.start_time else ""
+            lines.append(
+                f"  - {task.name}: {task.duration} min, {task.priority.name.lower()} priority, "
+                f"{task.preferred_time}{start}, {task.frequency.value}, due {task.due_date}"
+            )
+    return "\n".join(lines)
 
 
-# Some tasks have a start_time and some don't, so the sort shows timed tasks
-# ordered by clock time within a block, with untimed tasks after them.
-whiskers = Pet("Whiskers", "cat")
-whiskers.create_task(Task("play", "feather wand play", 15, Priority.LOW, "evening", start_time="18:00"))
-whiskers.create_task(Task("litter box", "scoop litter", 10, Priority.MEDIUM, "afternoon"))
-whiskers.create_task(Task("breakfast", "wet food", 5, Priority.HIGH, "morning", start_time="07:30"))
-whiskers.create_task(Task("medicine", "ear drops", 5, Priority.HIGH, "evening", start_time="19:00"))
-whiskers.create_task(Task("brush fur", "brush coat", 20, Priority.LOW, "morning", start_time="07:00"))
-whiskers.create_task(Task("vet note", "write up vet notes", 10, Priority.LOW, "afternoon"))
-whiskers.tasks[-1].mark_complete()
-
-demo_owner = Owner("Sam", [whiskers, Pet("Mochi", "dog")], {"morning": 60, "afternoon": 30, "evening": 60})
-demo_owner.pets[1].create_task(Task("evening walk", "walk Mochi", 30, Priority.HIGH, "evening"))
-demo_owner.pets[1].create_task(Task("breakfast", "kibble", 5, Priority.HIGH, "morning"))
-demo_owner.pets[1].tasks[0].mark_complete()
-
-demo = Scheduler(demo_owner)
-
-show("As added (unsorted):", demo_owner.get_all_tasks())
-show("Sorted by time block, start time, priority, duration (incomplete only):", demo.sort_by_time())
-show("Filter: incomplete tasks", demo.filter_tasks(completed=False))
-show("Filter: completed tasks", demo.filter_tasks(completed=True))
-show("Filter: Whiskers' tasks", demo.filter_tasks(pet_name="Whiskers"))
-show("Filter: Mochi's incomplete tasks", demo.filter_tasks(pet_name="Mochi", completed=False))
-
-
-# --- Recurring tasks demo ---
-# Completing a daily/weekly task creates the next occurrence; a one-time task does not.
-from datetime import date
-
-pip = Pet("Pip", "dog")
-pip.create_task(Task("walk", "walk Pip", 20, Priority.HIGH, "morning", Frequency.DAILY, due_date=date(2026, 10, 18)))
-pip.create_task(Task("bath", "bathe Pip", 30, Priority.MEDIUM, "evening", Frequency.WEEKLY, due_date=date(2026, 10, 18)))
-pip.create_task(Task("vet visit", "annual checkup", 45, Priority.HIGH, "afternoon", Frequency.ONCE, due_date=date(2026, 10, 18)))
-
-recurring = Scheduler(Owner("Alex", [pip], {"morning": 60, "afternoon": 60, "evening": 60}))
-
-
-def show_with_dates(title, tasks):
-    print(f"\n{title}")
-    for t in tasks:
-        status = "done" if t.completion_status else "todo"
-        print(f"  - [{status}] {t.name} ({t.frequency.value}) due {t.due_date}")
-
-
-show_with_dates("Before completing anything:", pip.tasks)
-for name in ("walk", "bath", "vet visit"):
-    new_task = recurring.mark_task_complete("Pip", name)
-    if new_task:
-        print(f"\nCompleted {name!r} -> next one created, due {new_task.due_date}")
+def show_result(result, output: Callable[[str], None]) -> None:
+    """Print what the agent produced: its message, the plan, and verifier findings."""
+    output(DIVIDER)
+    if result.ready:
+        output(f"Proposed plan (the agent used {result.iterations} model call(s))")
     else:
-        print(f"\nCompleted {name!r} -> no next occurrence ({'one-time task'})")
-show_with_dates("After completing all three:", pip.tasks)
-show_with_dates("Still to do (incomplete):", recurring.filter_tasks(completed=False))
+        output(STATUS_LABELS[result.status])
+    if result.message:
+        output(f"\nAgent: {result.message}")
+    if result.plan_text:
+        output(f"\n{result.plan_text}")
+    if result.report is not None and not result.report.clean:
+        output(f"\nVerifier:\n{result.report.summary()}")
+    output(DIVIDER)
 
 
-# --- Conflict detection demo ---
-# detect_conflicts() returns warning strings instead of raising, so the program keeps running.
-today = date.today()
+def read_line(prompt: str, input_fn: Callable[[str], str]) -> Optional[str]:
+    """Read one line, returning None if input has ended (Ctrl-D / Ctrl-C)."""
+    try:
+        return input_fn(prompt)
+    except (EOFError, KeyboardInterrupt):
+        return None
 
-luna = Pet("Luna", "dog")
-milo = Pet("Milo", "cat")
-luna.create_task(Task("walk", "morning walk", 30, Priority.HIGH, "morning", start_time="08:00", due_date=today))
-luna.create_task(Task("feed", "breakfast", 10, Priority.HIGH, "morning", start_time="08:00", due_date=today))  # same time as walk, same pet
-milo.create_task(Task("vet call", "phone the vet", 20, Priority.MEDIUM, "morning", start_time="08:15", due_date=today))  # overlaps walk, different pet
-milo.create_task(Task("play", "laser pointer", 15, Priority.LOW, "evening", start_time="18:00", due_date=today))  # no conflict
-milo.create_task(Task("brush", "brush coat", 10, Priority.LOW, "evening", due_date=today))  # no start_time, never checked
 
-conflict_scheduler = Scheduler(Owner("Casey", [luna, milo], {"morning": 120, "afternoon": 0, "evening": 60}))
+def ask_decision(input_fn: Callable[[str], str], output: Callable[[str], None]) -> str:
+    """Human-in-the-loop prompt. Returns 'approve', 'revise' or 'discard'."""
+    while True:
+        answer = read_line("Approve this plan? [y]es / [n]o, discard / [r]evise: ", input_fn)
+        if answer is None:
+            return "discard"
+        answer = answer.strip().lower()
+        if answer in ("y", "yes"):
+            return "approve"
+        if answer in ("n", "no"):
+            return "discard"
+        if answer in ("r", "revise"):
+            return "revise"
+        output("Please answer y, n or r.")
 
-print("\nChecking for conflicts:")
-warnings = conflict_scheduler.detect_conflicts()
-if warnings:
-    for w in warnings:
-        print(f"  {w}")
-else:
-    print("  No conflicts found.")
 
-# Resolve the conflicts by moving tasks, then check again.
-luna.edit_task("feed", start_time="08:30")  # back-to-back with walk, not overlapping
-milo.edit_task("vet call", start_time="09:00")
-print("\nAfter rescheduling feed to 08:30 and vet call to 09:00:")
-warnings = conflict_scheduler.detect_conflicts()
-for w in warnings or ["No conflicts found."]:
-    print(f"  {w}")
+def run_session(
+    owner: Owner,
+    llm: LLMClient,
+    plan_date: date,
+    input_fn: Callable[[str], str] = input,
+    output: Callable[[str], None] = print,
+    first_request: Optional[str] = None,
+    auto_approve: bool = False,
+) -> int:
+    """Run the request / review loop. Returns a process exit code.
+
+    With first_request the session handles that one request and then ends
+    (one-shot mode, used for scripted runs). Without it, it loops until /quit.
+    """
+    one_shot = first_request is not None
+    agent: Optional[PlanningAgent] = None
+    pending = first_request
+    exit_code = 0
+
+    while True:
+        # -- get the next piece of text from the user -----------------------
+        if pending is not None:
+            text = pending
+            pending = None
+        else:
+            prompt = "You> " if agent is None else "You (reply to the agent)> "
+            line = read_line(prompt, input_fn)
+            if line is None:
+                output("")
+                return exit_code
+            text = line.strip()
+            if text == "/quit":
+                return exit_code
+            if text == "/help":
+                output(HELP_TEXT)
+                continue
+            if text == "/state":
+                output(describe_owner(owner))
+                continue
+            if text == "/new":
+                agent = None
+                output("Started over with a clean draft.")
+                continue
+            if text == "":
+                continue
+
+        # -- hand it to the agent (a fresh draft for each new request) ------
+        if agent is None:
+            agent = PlanningAgent(owner, llm, plan_date=plan_date)
+        result = agent.submit(text)
+        show_result(result, output)
+
+        # -- plan is valid: the human decides -------------------------------
+        if result.ready:
+            if auto_approve:
+                output("(--auto-approve: skipping the approval prompt)")
+                decision = "approve"
+            else:
+                decision = ask_decision(input_fn, output)
+
+            if decision == "approve":
+                agent.commit()
+                output("Plan approved and saved.\n")
+                output(describe_owner(owner))
+                agent = None
+                if one_shot:
+                    return 0
+            elif decision == "discard":
+                output("Discarded. Nothing was saved.")
+                agent = None
+                if one_shot:
+                    return 1
+            else:
+                feedback = read_line("What should change? ", input_fn)
+                if feedback is None or not feedback.strip():
+                    output("No feedback given; discarded. Nothing was saved.")
+                    agent = None
+                    if one_shot:
+                        return 1
+                else:
+                    pending = feedback
+            continue
+
+        # -- not ready: in one-shot mode we're done, otherwise let them reply -
+        if one_shot:
+            return 1
+        # The agent keeps its conversation and draft, so whatever the user types next
+        # continues it (answering a question, or giving guidance after a failure).
+        # /new throws the draft away and starts fresh.
+
+
+def minutes_arg(text: str) -> int:
+    """argparse type for an availability option: a whole number from 0 to 1440."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a whole number") from None
+    if value < 0 or value > 1440:
+        raise argparse.ArgumentTypeError("minutes must be between 0 and 1440")
+    return value
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Command-line options."""
+    parser = argparse.ArgumentParser(description="PawPal+ planning agent")
+    parser.add_argument("--request", help="handle one request, then exit")
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="save a valid plan without asking (for demos and scripted runs only)",
+    )
+    parser.add_argument("--owner", default="Owner", help="owner name (default: Owner)")
+    for block in TIME_BLOCKS:
+        parser.add_argument(
+            f"--{block}", type=minutes_arg, default=60, metavar="MIN",
+            help=f"minutes available in the {block} (default: 60)",
+        )
+    parser.add_argument(
+        "--provider", choices=["gemini", "claude"],
+        help="which LLM to use (default: LLM_PROVIDER from .env, else gemini)",
+    )
+    return parser
+
+
+def main(argv: Optional[list] = None) -> int:
+    """Entry point."""
+    args = build_parser().parse_args(argv)
+    setup_logging()
+
+    constraints = {}
+    for block in TIME_BLOCKS:
+        constraints[block] = getattr(args, block)
+    try:
+        owner = Owner(name=args.owner, constraints=constraints)
+        llm = create_client(args.provider)
+    except (ValueError, LLMError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
+
+    if args.request is None:
+        print("PawPal+ Planning Agent. Type /help for examples, /quit to leave.\n")
+        print(describe_owner(owner))
+        print()
+    return run_session(
+        owner, llm, date.today(),
+        first_request=args.request, auto_approve=args.auto_approve,
+    )
+
+
+if __name__ == "__main__":
+    sys.exit(main())

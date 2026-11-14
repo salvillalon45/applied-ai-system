@@ -258,3 +258,38 @@ def test_revision_with_no_changes_is_needs_input_not_ready(owner):
     assert agent.submit("walk Rex").ready
     result = agent.submit("move it")
     assert result.status == Status.NEEDS_INPUT
+
+
+# ------------------------------------------- cap reached with a valid plan
+
+
+def test_valid_plan_at_the_cap_is_still_offered_for_review(owner):
+    """The last allowed model call leaves a clean plan; the model gets no turn to summarize."""
+    agent, _ = make_agent(
+        owner,
+        [
+            tool_use_response(("create_task", walk())),
+            tool_use_response(("generate_plan", {})),
+        ],
+        max_iterations=2,
+    )
+    result = agent.submit("walk Rex")
+    assert result.status == Status.READY
+    assert "final plan is valid" in result.message
+
+
+def test_plan_text_names_the_date_it_was_built_for(owner):
+    agent, _ = make_agent(
+        owner,
+        [
+            tool_use_response(
+                ("create_task", walk(due_date="2026-11-13")),
+                ("generate_plan", {"plan_date": "2026-11-13"}),
+            ),
+            text_response("Planned for tomorrow."),
+        ],
+    )
+    result = agent.submit("walk Rex tomorrow")
+    assert result.ready
+    assert result.plan_text.startswith("Plan for Friday 2026-11-13")
+    assert "walk" in result.plan_text
