@@ -108,6 +108,9 @@ Rules:
 - Never invent details the owner did not give. If a required detail such as duration or \
 which pet is missing and cannot be reasonably assumed, ask a short clarifying question as \
 plain text and call no tools.
+- If the request contradicts itself (for example it names two different times of day or \
+frequencies for the same task) or is ambiguous about which one applies, do not pick one. Ask \
+a short question as plain text and call no tools.
 - When the owner names a date ("tomorrow", "Friday"), set due_date to it when you create the \
 task, and use the same date as plan_date.
 - Never change the owner's stated availability or drop a task just to make the plan pass. If a \

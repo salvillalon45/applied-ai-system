@@ -64,8 +64,12 @@ def describe_owner(owner: Owner) -> str:
     return "\n".join(lines)
 
 
-def show_result(result, output: Callable[[str], None]) -> None:
-    """Print what the agent produced: its message, the plan, and verifier findings."""
+def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = None) -> None:
+    """Print what the agent produced: its message, the plan, and verifier findings.
+
+    When a draft is given and the plan is ready, also list exactly what approving
+    will save. The plan text alone hides details like daily vs weekly.
+    """
     output(DIVIDER)
     if result.ready:
         output(f"Proposed plan (the agent used {result.iterations} model call(s))")
@@ -77,6 +81,8 @@ def show_result(result, output: Callable[[str], None]) -> None:
         output(f"\n{result.plan_text}")
     if result.report is not None and not result.report.clean:
         output(f"\nVerifier:\n{result.report.summary()}")
+    if result.ready and draft is not None:
+        output(f"\nWhat approving will save:\n{describe_owner(draft)}")
     output(DIVIDER)
 
 
@@ -154,7 +160,7 @@ def run_session(
         if agent is None:
             agent = PlanningAgent(owner, llm, plan_date=plan_date)
         result = agent.submit(text)
-        show_result(result, output)
+        show_result(result, output, draft=agent.executor.draft)
 
         # -- plan is valid: the human decides -------------------------------
         if result.ready:

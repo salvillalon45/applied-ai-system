@@ -235,3 +235,45 @@ def test_parser_rejects_bad_availability(value, capsys):
     with pytest.raises(SystemExit) as exit_info:
         build_parser().parse_args(["--morning", value])
     assert exit_info.value.code == 2  # argparse usage error, before any model is reached
+
+
+# ------------------------------------------- the review screen shows what is saved
+
+
+def test_review_screen_lists_frequency_and_preferred_time():
+    from agent.agent import AgentResult, Status
+    from main import show_result
+    from pawpal_system import Frequency, Priority, Task
+
+    draft = Owner(name="Sam", constraints={"morning": 60, "afternoon": 60, "evening": 60})
+    pet = Pet(name="Ollie", species="dog")
+    draft.add_pet(pet)
+    pet.create_task(
+        Task(
+            name="Bath",
+            description="bath",
+            duration=30,
+            priority=Priority.MEDIUM,
+            frequency=Frequency.WEEKLY,
+            preferred_time="evening",
+        )
+    )
+    lines = []
+    ready = AgentResult(status=Status.READY, message="ok", iterations=3, plan_text="plan")
+
+    show_result(ready, lines.append, draft=draft)
+
+    text = "\n".join(lines)
+    assert "What approving will save" in text
+    assert "weekly" in text
+    assert "evening" in text
+
+
+def test_review_screen_hides_the_draft_when_not_ready():
+    from agent.agent import AgentResult, Status
+    from main import show_result
+
+    lines = []
+    asking = AgentResult(status=Status.NEEDS_INPUT, message="Which time?", iterations=1)
+    show_result(asking, lines.append, draft=Owner(name="Sam", constraints={}))
+    assert "What approving will save" not in "\n".join(lines)
