@@ -2,7 +2,7 @@ flowchart TD
     %% ---------- Input ----------
     User([Owner / User])
     CLI[CLI<br/>main.py]
-    InGuard{{Input guardrails<br/>empty / too long / off-topic}}
+    InGuard{{Input guardrails<br/>empty / too long}}
 
     User -->|plain-English request| CLI
     CLI --> InGuard
@@ -12,7 +12,7 @@ flowchart TD
     subgraph AGENT["Agent  (agent/agent.py)"]
         direction TB
         Loop[Orchestrator loop<br/>max N iterations]
-        LLM[[Claude API<br/>PLAN: choose tool calls]]
+        LLM[[LLM: Gemini or Claude<br/>PLAN: choose tool calls<br/>system prompt keeps it on-topic]]
         Exec[Tool executor<br/>whitelisted tools only]
         Loop -->|messages + tool schemas| LLM
         LLM -->|tool_use| Exec
@@ -35,7 +35,7 @@ flowchart TD
     %% ---------- Check ----------
     Verify{{Verifier<br/>agent/checks.py<br/>deterministic, no LLM}}
     Sched -->|plan + skipped tasks| Verify
-    Verify -->|CHECK: errors found,<br/>fed back to Claude| Loop
+    Verify -->|CHECK: errors found,<br/>fed back to the LLM| Loop
     Verify -->|plan is valid| Review
 
     %% ---------- Human in the loop ----------
@@ -66,7 +66,7 @@ flowchart TD
     end
 
     Runner -->|runs agent with| Loop
-    Mock -.->|replaces Claude API<br/>in offline runs| LLM
+    Mock -.->|replaces the LLM<br/>in offline runs| LLM
     Verify -.->|same checks reused| Runner
 
     %% ---------- Styling ----------
