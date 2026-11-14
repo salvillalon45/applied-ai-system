@@ -151,6 +151,7 @@ class ToolExecutor:
         self.plan_date: date = plan_date or date.today()
         self.last_report: Optional[CheckReport] = None
         self.plan_is_current = False  # False once anything changes after generate_plan
+        self.changes_made = 0  # count of successful mutations; the agent loop compares it
 
         self._tools: Dict[str, Callable[[Dict[str, Any]], str]] = {
             "get_state": self._get_state,
@@ -259,6 +260,7 @@ class ToolExecutor:
     def _mark_changed(self) -> None:
         """Any mutation makes the last generated plan out of date."""
         self.plan_is_current = False
+        self.changes_made += 1
 
     # ------------------------------------------------------------------
     # Tools
