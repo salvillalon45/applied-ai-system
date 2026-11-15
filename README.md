@@ -13,7 +13,7 @@ The scheduling backend, [pawpal_system.py](pawpal_system.py), is **unchanged**. 
 | `agent/` | The plan → act → check loop, the tool whitelist, the verifier and the LLM clients |
 | `main.py` | A CLI with a human-approval step |
 | `eval/` | A reliability harness with 13 cases that runs offline or against the real model |
-| `tests/` | 138 automated tests (about 1 second, no network) |
+| `tests/` | 140 automated tests (about 1 second, no network) |
 
 The original Streamlit UI (`app.py`) still runs the old manual flow and is not connected to the agent.
 
@@ -89,7 +89,7 @@ In interactive mode, type a request, then answer `y` (save), `n` (discard) or `r
 **No API key?** These need none:
 
 ```bash
-python -m pytest                      # 138 tests
+python -m pytest                      # 140 tests
 python -m eval.run_eval               # reliability harness, scripted mock model
 python demo_trace.py                  # prints every loop step for a scripted scenario
 ```
@@ -175,7 +175,7 @@ For a step-by-step view of the loop, run `python demo_trace.py`. It shows each p
 
 ## Testing summary
 
-**138 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
+**140 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
 
 **Reliability harness:** 13 cases, each judged on the same six rules: it ends in an allowed status, the real data is untouched, no pet disappears, a READY plan passed the verifier, a READY plan keeps every stated duration, and the loop stays under its cap.
 
@@ -192,6 +192,7 @@ Full tables: [eval/results_offline.md](eval/results_offline.md) and [eval/result
 - **The model changes things you didn't ask for.** Gemini once shortened a 30-minute bath to 15 minutes. After I tightened the prompt, a later run shifted the start time instead, which is what I wanted. Two runs of the same request can still differ, so the human approval step is the real safety net.
 - **The harness has to be able to fail.** I tested it with deliberately bad runs (wrong status, shortened duration, crash) to make sure it reports them.
 - **I misdiagnosed a gap.** I thought a 60-minute task with 30 free minutes slipped through. In fact the scheduler had moved it to the afternoon, so my test case was wrong. Designing the case properly exposed a *real* gap, a task that fits nowhere, and I added the `unscheduled_task` check for it.
+- **Hand-testing found what the eval missed.** A request that named two times of day ("in the morning… in the evening") made the model silently pick one, and a prompt rule telling it to ask did not change that. The review screen now lists exactly what approving will save (including daily vs weekly), so a wrong guess can be caught before it is saved.
 - **Where it is still weak:** with no duration given ("Walk Rex."), the live model guessed one instead of asking. The summary text can also be inaccurate. In one run the model said it "moved the bath to the afternoon and set its start time to 08:30", which doesn't match a morning clock time. The plan itself was valid, but the explanation wasn't reliable.
 
 See [model_card.md](model_card.md) for limitations, misuse and AI collaboration.
@@ -212,7 +213,7 @@ eval/
 - results_live.md
 
 tests/
-- 138 tests
+- 140 tests
 
 diagrams/
 - architecture.mmd

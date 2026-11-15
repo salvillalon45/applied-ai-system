@@ -17,6 +17,8 @@
 
 **It makes judgment calls the owner didn't state.** Asked "Walk Rex." with no duration, the live model guessed one instead of asking. It also picked "medium" priority when none was given. My eval accepts either behavior for that case, so it passes, but the guess is still a limitation.
 
+**It guesses on contradictory or ambiguous requests instead of asking.** While testing the CLI by hand, I typed "In the morning, I want to also add a task where I bath him. This will be a weekly task. I bathed him in the evening for 30 minutes." The model scheduled the bath in the morning and never mentioned that my message named two times. An earlier request ("a walk in the morning and the afternoon. Actually in the evening...") had the same pattern: it kept only the evening walk. I added a system prompt rule to ask when a request contradicts itself, then re-ran the bath message twice. The model still didn't ask. Both runs picked evening and did not flag the conflict. So the prompt rule is not reliable, and a user could approve a wrong guess without noticing it.
+
 **Its explanations can be wrong even when the plan is right.** In one run the summary said the bath was moved "to the afternoon" and given a start time of 08:30, which is a morning time. The plan was valid and the text was inaccurate. People may trust the summary over the plan.
 
 **The verifier only checks what I wrote checks for.** It catches clock-time conflicts, block overflow, dropped, duplicated and unscheduled tasks, and priority inversions. It does not check whether a plan is *sensible*. It would accept a 10-hour walk if the owner had 10 hours free, and it knows nothing about feeding intervals, medication timing or what is safe for a species.
@@ -40,7 +42,7 @@
 | **Runaway cost or loops** | At most 10 model calls per request, 2 nudges, input capped at 1000 characters. | There is no per-user or per-day limit, since this is a local single-user CLI. |
 | **Off-topic use** (poems, general chat) | The system prompt limits the agent to pet-care scheduling. | This is enforced only by the prompt, not by code, so a determined user could push the model off-topic. It can't do harm with the tools it has. |
 | **Unsafe pet-care advice** (medication doses, diets) | The agent only schedules tasks the owner describes. It has no tool for giving advice. | The model could still say something unsafe in its free-text summary. There is no content check on that text. |
-| **Silent changes to the owner's data** | All edits go to a draft copy. The agent must list every change it made. Real data changes only after `y`. | If the owner approves without reading, the summary might be incomplete. |
+| **Silent changes to the owner's data** | All edits go to a draft copy. The agent must list every change it made. The review screen lists exactly what approving will save. Real data changes only after `y`. | If the owner approves without reading, the summary might be incomplete or wrong. |
 | **Auto-approve in the wrong place** | `--auto-approve` is a flag the user must type. It is documented as for demos only. | If someone uses it in a real flow, the human check is gone. |
 
 ## 4. What surprised me while testing reliability
@@ -51,13 +53,14 @@
 4. **The self-correction loop really worked.** In one run Gemini stopped to ask a question while the plan still had a conflict. The nudge pushed it back, and it fixed the conflict.
 5. **I misjudged my own test.** I believed a 60-minute task with 30 free morning minutes slipped past the verifier. It hadn't: the scheduler moved the task to the afternoon. My test was wrong, not the verifier. Fixing the test exposed a real gap, a task that fits in *no* block is "skipped but listed", so the old checks passed it. I added the `unscheduled_task` check.
 6. **A safe-looking result can still be a weakness.** In the live injection test the model made no changes and stopped after one call. The test passes because nothing unsafe happened, but the model also declined a harmless request, and I don't know why.
-7. **Small environment problems took real time.** The Gemini SDK uses `httpx2`, not `httpx`. The model name I first tried returned a 404, and older Gemini models were retired for new users.
+7. **Hand-testing found a problem the eval cases missed.** My eval cases used clean requests. Typing a messy, self-contradicting one myself showed the model silently picking a time of day. I also first thought the agent couldn't tell daily from weekly, because the review screen never showed frequency. The tool log showed it had set `weekly` correctly, so the real problem was that I couldn't see the saved details before approving. The review screen now ends with a "What approving will save" list (priority, preferred time, start time, frequency), so a wrong guess can be caught before it is saved. Prompt wording alone did not fix the guessing, but making the draft visible did make it catchable. I did not add an eval case for contradictions, because a live model that guesses and one that asks would both be accepted, so the case would pass either way and prove nothing.
+8. **Small environment problems took real time.** The Gemini SDK uses `httpx2`, not `httpx`. The model name I first tried returned a 404, and older Gemini models were retired for new users.
 
 **Test results**
 
 | Check | Result |
 |---|---|
-| Automated tests (offline, about 1 second) | 138 pass |
+| Automated tests (offline, about 1 second) | 140 pass |
 | Eval harness, offline mock | 13/13 pass |
 | Eval harness, live Gemini | 9/9 pass on the final run (one earlier run of the over-capacity case ended in an API error, and a rerun passed) |
 
