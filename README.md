@@ -13,7 +13,7 @@ The scheduling backend, [pawpal_system.py](pawpal_system.py), is **unchanged**. 
 | `agent/` | The plan → act → check loop, the tool whitelist, the verifier and the LLM clients |
 | `main.py` | A CLI with a human-approval step |
 | `eval/` | A reliability harness with 13 cases that runs offline or against the real model |
-| `tests/` | 144 automated tests (about 1 second, no network) |
+| `tests/` | 147 automated tests (about 1 second, no network) |
 
 The original Streamlit UI (`app.py`) still runs the old manual flow and is not connected to the agent.
 
@@ -89,7 +89,7 @@ In interactive mode, type a request, then answer `y` (save), `n` (discard) or `r
 **No API key?** These need none:
 
 ```bash
-python -m pytest                      # 144 tests
+python -m pytest                      # 147 tests
 python -m eval.run_eval               # reliability harness, scripted mock model
 python demo_trace.py                  # prints every loop step for a scripted scenario
 ```
@@ -175,7 +175,7 @@ For a step-by-step view of the loop, run `python demo_trace.py`. It shows each p
 
 ## Testing summary
 
-**144 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
+**147 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
 
 **Reliability harness:** 13 cases, each judged on the same six rules: it ends in an allowed status, the real data is untouched, no pet disappears, a READY plan passed the verifier, a READY plan keeps every stated duration, and the loop stays under its cap.
 
@@ -213,7 +213,7 @@ eval/
 - results_live.md
 
 tests/
-- 144 tests
+- 147 tests
 
 diagrams/
 - architecture.mmd

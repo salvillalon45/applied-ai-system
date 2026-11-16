@@ -63,7 +63,7 @@
 
 | Check | Result |
 |---|---|
-| Automated tests (offline, about 1 second) | 144 pass |
+| Automated tests (offline, about 1 second) | 147 pass |
 | Eval harness, offline mock | 13/13 pass |
 | Eval harness, live Gemini | 9/9 pass on the final run (one earlier run of the over-capacity case ended in an API error, and a rerun passed) |
 

@@ -23,6 +23,7 @@ from agent.llm import LLMClient, LLMError, create_client
 from pawpal_system import TIME_BLOCKS, Owner, Scheduler
 
 DIVIDER = "-" * 70
+HINT = "Tip: /plan = minutes used per time block, /state = saved tasks, /help = more"
 
 HELP_TEXT = """Describe what you want in plain English, for example:
   Rex needs a 30 minute walk every morning and a 20 minute play session in the evening.
@@ -48,7 +49,7 @@ STATUS_LABELS = {
 
 def describe_owner(owner: Owner) -> str:
     """Text summary of the owner's saved availability, pets and tasks."""
-    lines = ["Your daily availability (free minutes per time block):"]
+    lines = ["Your daily availability (total minutes per time block; /plan shows how much is used):"]
     for block in TIME_BLOCKS:
         lines.append(f"  {block}: {owner.constraints[block]}")
     if not owner.pets:
@@ -77,6 +78,13 @@ def current_plan_text(owner: Owner, plan_date: date) -> str:
     scheduler.generate_daily_plan(plan_date)
     scheduler.generate_explanation_of_plan()
     return f"Plan for {plan_date:%A %Y-%m-%d}:\n{scheduler.explanation_of_plan}"
+
+
+def show_block(output: Callable[[str], None], text: str) -> None:
+    """Print text between two dividers, so it is clearly the program's reply to a You> line."""
+    output(DIVIDER)
+    output(text)
+    output(DIVIDER)
 
 
 def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = None) -> None:
@@ -147,6 +155,7 @@ def run_session(
     agent: Optional[PlanningAgent] = None
     pending = first_request
     exit_code = 0
+    responded = False  # True once something was printed in reply to a You> line
 
     while True:
         # -- get the next piece of text from the user -----------------------
@@ -154,6 +163,8 @@ def run_session(
             text = pending
             pending = None
         else:
+            if responded:
+                output(HINT)
             prompt = "You> " if agent is None else "You (reply to the agent)> "
             line = read_line(prompt, input_fn)
             if line is None:
@@ -162,20 +173,21 @@ def run_session(
             text = line.strip()
             if text == "/quit":
                 return exit_code
+            if text == "":
+                continue
+            responded = True
             if text == "/help":
-                output(HELP_TEXT)
+                show_block(output, HELP_TEXT)
                 continue
             if text == "/state":
-                output(describe_owner(owner))
+                show_block(output, describe_owner(owner))
                 continue
             if text == "/plan":
-                output(current_plan_text(owner, plan_date))
+                show_block(output, current_plan_text(owner, plan_date))
                 continue
             if text == "/new":
                 agent = None
-                output("Started over with a clean draft.")
-                continue
-            if text == "":
+                show_block(output, "Started over with a clean draft.")
                 continue
 
         # -- hand it to the agent (a fresh draft for each new request) ------
@@ -198,11 +210,13 @@ def run_session(
                 output(current_plan_text(owner, plan_date))
                 output("")
                 output(describe_owner(owner))
+                output(DIVIDER)
                 agent = None
                 if one_shot:
                     return 0
             elif decision == "discard":
                 output("Discarded. Nothing was saved.")
+                output(DIVIDER)
                 agent = None
                 if one_shot:
                     return 1
@@ -210,6 +224,7 @@ def run_session(
                 feedback = read_line("What should change? ", input_fn)
                 if feedback is None or not feedback.strip():
                     output("No feedback given; discarded. Nothing was saved.")
+                    output(DIVIDER)
                     agent = None
                     if one_shot:
                         return 1
@@ -227,6 +242,7 @@ def run_session(
                 "This attempt was discarded and nothing was saved. Your saved schedule "
                 "is unchanged (type /plan to see it)."
             )
+            output(DIVIDER)
             agent = None
             continue
         # Otherwise the agent is asking a question (or the model/API had a problem).
@@ -283,7 +299,8 @@ def main(argv: Optional[list] = None) -> int:
         return 2
 
     if args.request is None:
-        print("PawPal+ Planning Agent. Type /help for examples, /quit to leave.\n")
+        print("PawPal+ Planning Agent. Type /plan to see minutes used, /state for saved tasks,")
+        print("/help for examples, /quit to leave.\n")
         print(describe_owner(owner))
         print()
     return run_session(

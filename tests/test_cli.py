@@ -285,9 +285,13 @@ def test_review_screen_hides_the_draft_when_not_ready():
 def test_plan_command_shows_minutes_used_from_saved_tasks(owner):
     first = good_plan_script()
     code, user = run(owner, first, ["walk Rex", "y", "/plan", "/quit"])
-    # the last thing printed is the /plan output: 30 of the 60 morning minutes are used
-    assert "Morning (30/60 min used)" in user.printed[-1]
-    assert "Rex: walk" in user.printed[-1]
+    # the /plan reply is the last block printed: 30 of the 60 morning minutes are used
+    reply = ""
+    for line in user.printed:
+        if line.startswith("Plan for"):
+            reply = line  # keep the last one: the /plan reply
+    assert "Morning (30/60 min used)" in reply
+    assert "Rex: walk" in reply
 
 
 def test_plan_command_makes_no_model_call_and_changes_nothing(owner):
@@ -327,3 +331,30 @@ def test_failed_attempt_is_discarded_so_the_next_request_starts_clean(owner):
     assert names == ["walk"]
     # and the prompt went back to a new request, not "reply to the agent"
     assert user.prompts[1] == "You> "
+
+
+# ------------------------------------------------- framing and reminders
+
+
+def test_every_reply_is_framed_between_dividers(owner):
+    from main import DIVIDER
+
+    code, user = run(owner, [], ["/state", "/plan", "/help", "/quit"])
+    # three command replies, each opened and closed by a divider
+    assert user.printed.count(DIVIDER) == 6
+
+
+def test_reminder_appears_after_a_reply_but_not_before_the_first_prompt(owner):
+    from main import HINT
+
+    code, user = run(owner, [], ["/state", "/quit"])
+    hints = user.printed.count(HINT)
+    assert hints == 1  # shown once, before the second You> prompt
+    assert user.printed.index(HINT) > 0  # never before the first reply
+
+
+def test_blank_lines_do_not_trigger_the_reminder(owner):
+    from main import HINT
+
+    code, user = run(owner, [], ["", "  ", "/quit"])
+    assert HINT not in user.printed
