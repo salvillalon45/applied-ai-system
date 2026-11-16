@@ -13,7 +13,7 @@ The scheduling backend, [pawpal_system.py](pawpal_system.py), is **unchanged**. 
 | `agent/` | The plan → act → check loop, the tool whitelist, the verifier and the LLM clients |
 | `main.py` | A CLI with a human-approval step |
 | `eval/` | A reliability harness with 13 cases that runs offline or against the real model |
-| `tests/` | 149 automated tests (about 1 second, no network) |
+| `tests/` | 153 automated tests (about 1 second, no network) |
 
 The original Streamlit UI (`app.py`) still runs the old manual flow and is not connected to the agent.
 
@@ -89,7 +89,7 @@ In interactive mode, type a request, then answer `y` (save), `n` (discard) or `r
 **No API key?** These need none:
 
 ```bash
-python -m pytest                      # 149 tests
+python -m pytest                      # 153 tests
 python -m eval.run_eval               # reliability harness, scripted mock model
 python demo_trace.py                  # prints every loop step for a scripted scenario
 ```
@@ -128,7 +128,7 @@ Rex (dog):
 
 ### 2. An impossible request is not forced through
 
-Every block has only 30 free minutes, so a 60-minute walk fits nowhere. The agent is forbidden from shortening the walk or changing the owner's availability. It stops, explains why, and nothing is saved.
+Every block has only 30 free minutes, so a 60-minute walk fits nowhere. The agent is forbidden from shortening the walk or changing the owner's availability. It stops, explains why, and nothing is saved. (The verifier's raw error text goes to the model, not to the owner, so the screen shows only the agent's explanation and the skipped task.)
 
 ```text
 $ python main.py --morning 30 --afternoon 30 --evening 30 --request "Rex needs a 60 minute walk in the morning."
@@ -142,8 +142,6 @@ If you update your morning availability to 60 minutes, I will be able to schedul
 Skipped:
   - Rex: walk - 60 min is longer than any available time block (longest is 30 min)
 
-Verifier:
-[ERROR] unscheduled_task: 'walk' for Rex (60 min) is NOT in the plan: 60 min is longer than any available time block (longest is 30 min). Do not shorten it or change the owner's stated availability. Move it to another time block if one has room, otherwise ask the owner how to proceed.
 ----------------------------------------------------------------------
 ```
 
@@ -175,7 +173,7 @@ For a step-by-step view of the loop, run `python demo_trace.py`. It shows each p
 
 ## Testing summary
 
-**149 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
+**153 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
 
 **Reliability harness:** 13 cases, each judged on the same six rules: it ends in an allowed status, the real data is untouched, no pet disappears, a READY plan passed the verifier, a READY plan keeps every stated duration, and the loop stays under its cap.
 
@@ -213,7 +211,7 @@ eval/
 - results_live.md
 
 tests/
-- 149 tests
+- 153 tests
 
 diagrams/
 - architecture.mmd

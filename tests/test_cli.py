@@ -195,7 +195,7 @@ def test_one_shot_failure_exits_nonzero(owner):
     assert owner.pets[0].tasks == []
 
 
-def test_one_shot_shows_verifier_errors_when_agent_cannot_fix_them(owner):
+def test_one_shot_explains_failure_without_raw_verifier_text(owner):
     conflict = tool_use_response(
         ("create_task", walk(name="a", start_time="08:00")),
         ("create_task", walk(name="b", start_time="08:10")),
@@ -205,7 +205,8 @@ def test_one_shot_shows_verifier_errors_when_agent_cannot_fix_them(owner):
     code, user = run(owner, script, [], first_request="two walks", auto_approve=True)
     assert code == 1
     assert "could not produce a valid plan" in user.transcript
-    assert "[ERROR] conflict" in user.transcript
+    assert "I can't fix that." in user.transcript  # the agent's own explanation
+    assert "[ERROR]" not in user.transcript
     assert owner.pets[0].tasks == []
 
 
@@ -358,3 +359,70 @@ def test_blank_lines_do_not_trigger_the_reminder(owner):
 
     code, user = run(owner, [], ["", "  ", "/quit"])
     assert HINT not in user.printed
+
+
+# ------------------------------------------- verifier text shown in plain language
+
+
+def overlapping_script():
+    return [
+        tool_use_response(
+            ("create_task", walk(name="a", start_time="08:00")),
+            ("create_task", walk(name="b", start_time="08:10")),
+            ("generate_plan", {}),
+        )
+    ] + [text_response("I could not fix the overlap.")] * 3
+
+
+def test_failed_plan_does_not_dump_raw_verifier_text(owner):
+    code, user = run(owner, overlapping_script(), ["two overlapping walks", "/quit"])
+    assert "I could not fix the overlap." in user.transcript
+    assert "[ERROR]" not in user.transcript
+    assert "Verifier:" not in user.transcript
+
+
+def test_unknown_command_costs_no_model_call(owner):
+    llm = MockLLMClient([])
+    user = ScriptedUser(["/pets", "/quit"])
+    run_session(owner, llm, PLAN_DATE, input_fn=user.input, output=user.output)
+    assert llm.calls == []
+    assert "Unknown command /pets" in user.transcript
+
+
+def test_out_of_attempts_explains_why_in_plain_language():
+    from agent.agent import AgentResult, Status
+    from agent.checks import CheckIssue, CheckReport, ERROR
+    from main import show_result
+
+    issue = CheckIssue(
+        code="unscheduled_task",
+        severity=ERROR,
+        message="'walk' ... Do not shorten it or change the owner's stated availability.",
+        user_message="'walk' for Mia (35 min) doesn't fit: no block has 35 min left.",
+    )
+    result = AgentResult(
+        status=Status.MAX_ITERATIONS,
+        message="Stopped after 10 attempts without a valid plan.",
+        iterations=10,
+        report=CheckReport(issues=[issue]),
+    )
+    lines = []
+    show_result(result, lines.append)
+    text = "\n".join(lines)
+    assert "doesn't fit" in text
+    assert "Do not shorten" not in text  # the instruction to the model stays out of view
+
+
+def test_ready_plan_shows_warnings_as_a_heads_up():
+    from agent.agent import AgentResult, Status
+    from agent.checks import CheckIssue, CheckReport, WARNING
+    from main import show_result
+
+    warning = CheckIssue(code="priority_inversion", severity=WARNING, message="HIGH task skipped.")
+    result = AgentResult(
+        status=Status.READY, message="ok", iterations=3, report=CheckReport(issues=[warning])
+    )
+    lines = []
+    show_result(result, lines.append)
+    assert "Heads up:" in "\n".join(lines)
+    assert "HIGH task skipped." in "\n".join(lines)

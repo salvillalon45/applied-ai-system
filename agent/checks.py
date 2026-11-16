@@ -33,6 +33,16 @@ class CheckIssue:
     message: str  # written so it can be fed straight back to the LLM
     pet_name: Optional[str] = None
     task_name: Optional[str] = None
+    # A plain-language version for the owner. The LLM-facing message can contain
+    # instructions to the model that mean nothing to a person.
+    user_message: Optional[str] = None
+
+    @property
+    def text_for_user(self) -> str:
+        """What to show the owner: the plain version if there is one."""
+        if self.user_message:
+            return self.user_message
+        return self.message
 
 
 @dataclass
@@ -230,6 +240,9 @@ def check_unscheduled_tasks(
                 ),
                 pet_name=task.pet_name,
                 task_name=task.name,
+                user_message=(
+                    f"'{task.name}' for {task.pet_name} ({task.duration} min) doesn't fit: {reason}."
+                ),
             )
         )
     return issues

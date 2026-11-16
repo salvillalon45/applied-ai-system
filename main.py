@@ -87,6 +87,26 @@ def show_block(output: Callable[[str], None], text: str) -> None:
     output(DIVIDER)
 
 
+def output_verifier_notes(result, output: Callable[[str], None]) -> None:
+    """Show the verifier's findings in plain language, only where they add something.
+
+    - A ready plan can still carry warnings: list them as a heads-up.
+    - A failed plan: the agent's own message already explains why, so say nothing more.
+    - Exception: when the agent ran out of attempts its message is just "stopped", so
+      the reasons are the only explanation the owner gets.
+    """
+    if result.report is None:
+        return
+    if result.ready and result.report.warnings:
+        output("\nHeads up:")
+        for issue in result.report.warnings:
+            output(f"  - {issue.text_for_user}")
+    elif result.status == Status.MAX_ITERATIONS and result.report.errors:
+        output("\nWhat is blocking the plan:")
+        for issue in result.report.errors:
+            output(f"  - {issue.text_for_user}")
+
+
 def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = None) -> None:
     """Print what the agent produced: its message, the plan, and verifier findings.
 
@@ -102,8 +122,7 @@ def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = 
         output(f"\nAgent: {result.message}")
     if result.plan_text:
         output(f"\n{result.plan_text}")
-    if result.report is not None and not result.report.clean:
-        output(f"\nVerifier:\n{result.report.summary()}")
+    output_verifier_notes(result, output)
     if result.ready and draft is not None:
         output(
             "\nWhat approving will save "
@@ -188,6 +207,11 @@ def run_session(
             if text == "/new":
                 agent = None
                 show_block(output, "Started over with a clean draft.")
+                continue
+            if text.startswith("/"):
+                # A mistyped command (like /pets) is not a request: don't spend a model call on it.
+                command = text.split()[0]
+                show_block(output, f"Unknown command {command}. Type /help to see the commands.")
                 continue
 
         # -- hand it to the agent (a fresh draft for each new request) ------
