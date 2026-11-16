@@ -19,6 +19,8 @@
 
 **It guesses on contradictory or ambiguous requests instead of asking.** While testing the CLI by hand, I typed "In the morning, I want to also add a task where I bath him. This will be a weekly task. I bathed him in the evening for 30 minutes." The model scheduled the bath in the morning and never mentioned that my message named two times. An earlier request ("a walk in the morning and the afternoon. Actually in the evening...") had the same pattern: it kept only the evening walk. I added a system prompt rule to ask when a request contradicts itself, then re-ran the bath message twice. The model still didn't ask. Both runs picked evening and did not flag the conflict. So the prompt rule is not reliable, and a user could approve a wrong guess without noticing it.
 
+**When a request is impossible, it flails and edits details the owner stated.** In a hand-test session my three saved tasks already needed 210 minutes against 180 available, and I asked for one more. The agent correctly refused to change my availability, but over its 10 attempts it kept editing other tasks to try to make room: it changed one task's preferred time three times, gave it a start time of 18:00 and removed it, and moved a different walk's preference from evening to afternoon. The prompt forbids changing stated details, and the model did it anyway. Nothing was saved, because nothing was approved. But the CLI then kept the half-edited draft, and my next message ("what is my current plan?") made the model edit it again. Two fixes: a failed attempt (unresolved or out of attempts) now discards its draft, and a `/plan` command shows the saved plan without calling the model. The model still edits stated details while it flails, so only the discard and the approval screen protect the owner.
+
 **Its explanations can be wrong even when the plan is right.** In one run the summary said the bath was moved "to the afternoon" and given a start time of 08:30, which is a morning time. The plan was valid and the text was inaccurate. People may trust the summary over the plan.
 
 **The verifier only checks what I wrote checks for.** It catches clock-time conflicts, block overflow, dropped, duplicated and unscheduled tasks, and priority inversions. It does not check whether a plan is *sensible*. It would accept a 10-hour walk if the owner had 10 hours free, and it knows nothing about feeding intervals, medication timing or what is safe for a species.
@@ -54,13 +56,14 @@
 5. **I misjudged my own test.** I believed a 60-minute task with 30 free morning minutes slipped past the verifier. It hadn't: the scheduler moved the task to the afternoon. My test was wrong, not the verifier. Fixing the test exposed a real gap, a task that fits in *no* block is "skipped but listed", so the old checks passed it. I added the `unscheduled_task` check.
 6. **A safe-looking result can still be a weakness.** In the live injection test the model made no changes and stopped after one call. The test passes because nothing unsafe happened, but the model also declined a harmless request, and I don't know why.
 7. **Hand-testing found a problem the eval cases missed.** My eval cases used clean requests. Typing a messy, self-contradicting one myself showed the model silently picking a time of day. I also first thought the agent couldn't tell daily from weekly, because the review screen never showed frequency. The tool log showed it had set `weekly` correctly, so the real problem was that I couldn't see the saved details before approving. The review screen now ends with a "What approving will save" list (priority, preferred time, start time, frequency), so a wrong guess can be caught before it is saved. Prompt wording alone did not fix the guessing, but making the draft visible did make it catchable. I did not add an eval case for contradictions, because a live model that guesses and one that asks would both be accepted, so the case would pass either way and prove nothing.
-8. **Small environment problems took real time.** The Gemini SDK uses `httpx2`, not `httpx`. The model name I first tried returned a 404, and older Gemini models were retired for new users.
+8. **A read-only question changed the draft.** Typing "what is my current plan?" sent a request to the model, which called edit tools. A question that only needs deterministic code should not go through the model at all, so the CLI now has `/plan`.
+9. **Small environment problems took real time.** The Gemini SDK uses `httpx2`, not `httpx`. The model name I first tried returned a 404, and older Gemini models were retired for new users.
 
 **Test results**
 
 | Check | Result |
 |---|---|
-| Automated tests (offline, about 1 second) | 140 pass |
+| Automated tests (offline, about 1 second) | 144 pass |
 | Eval harness, offline mock | 13/13 pass |
 | Eval harness, live Gemini | 9/9 pass on the final run (one earlier run of the over-capacity case ended in an API error, and a rerun passed) |
 

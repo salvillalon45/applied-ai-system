@@ -13,13 +13,14 @@ The flow for every request:
 """
 
 import argparse
+import copy
 import sys
 from datetime import date
 from typing import Callable, Optional
 
 from agent.agent import PlanningAgent, Status, setup_logging
 from agent.llm import LLMClient, LLMError, create_client
-from pawpal_system import TIME_BLOCKS, Owner
+from pawpal_system import TIME_BLOCKS, Owner, Scheduler
 
 DIVIDER = "-" * 70
 
@@ -28,7 +29,8 @@ HELP_TEXT = """Describe what you want in plain English, for example:
   Add a cat named Mia with a vet visit on Friday at 14:00 for 60 minutes.
 
 Commands:
-  /state   show your saved schedule
+  /plan    show today's plan from your saved tasks, with minutes used per time block
+  /state   show your saved tasks and availability
   /new     discard the current draft and start over
   /help    show this message
   /quit    leave"""
@@ -46,7 +48,7 @@ STATUS_LABELS = {
 
 def describe_owner(owner: Owner) -> str:
     """Text summary of the owner's saved availability, pets and tasks."""
-    lines = ["Available minutes:"]
+    lines = ["Your daily availability (free minutes per time block):"]
     for block in TIME_BLOCKS:
         lines.append(f"  {block}: {owner.constraints[block]}")
     if not owner.pets:
@@ -59,9 +61,22 @@ def describe_owner(owner: Owner) -> str:
             start = f" at {task.start_time}" if task.start_time else ""
             lines.append(
                 f"  - {task.name}: {task.duration} min, {task.priority.name.lower()} priority, "
-                f"{task.preferred_time}{start}, {task.frequency.value}, due {task.due_date}"
+                f"prefers {task.preferred_time}{start}, {task.frequency.value}, due {task.due_date}"
             )
     return "\n".join(lines)
+
+
+def current_plan_text(owner: Owner, plan_date: date) -> str:
+    """Today's plan built from the SAVED tasks. No model call, so it is instant and free.
+
+    Each block shows "used/available" minutes, so the owner can see how much free
+    time is left before asking for the next task. It runs on a copy, so viewing the
+    plan can never change the owner's data.
+    """
+    scheduler = Scheduler(copy.deepcopy(owner))
+    scheduler.generate_daily_plan(plan_date)
+    scheduler.generate_explanation_of_plan()
+    return f"Plan for {plan_date:%A %Y-%m-%d}:\n{scheduler.explanation_of_plan}"
 
 
 def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = None) -> None:
@@ -82,7 +97,11 @@ def show_result(result, output: Callable[[str], None], draft: Optional[Owner] = 
     if result.report is not None and not result.report.clean:
         output(f"\nVerifier:\n{result.report.summary()}")
     if result.ready and draft is not None:
-        output(f"\nWhat approving will save:\n{describe_owner(draft)}")
+        output(
+            "\nWhat approving will save "
+            "(preferences only; the plan above shows where each task lands today):\n"
+            f"{describe_owner(draft)}"
+        )
     output(DIVIDER)
 
 
@@ -149,6 +168,9 @@ def run_session(
             if text == "/state":
                 output(describe_owner(owner))
                 continue
+            if text == "/plan":
+                output(current_plan_text(owner, plan_date))
+                continue
             if text == "/new":
                 agent = None
                 output("Started over with a clean draft.")
@@ -173,6 +195,8 @@ def run_session(
             if decision == "approve":
                 agent.commit()
                 output("Plan approved and saved.\n")
+                output(current_plan_text(owner, plan_date))
+                output("")
                 output(describe_owner(owner))
                 agent = None
                 if one_shot:
@@ -196,9 +220,18 @@ def run_session(
         # -- not ready: in one-shot mode we're done, otherwise let them reply -
         if one_shot:
             return 1
-        # The agent keeps its conversation and draft, so whatever the user types next
-        # continues it (answering a question, or giving guidance after a failure).
-        # /new throws the draft away and starts fresh.
+        # The agent gave up (it never found a valid plan). Its draft may hold edits the
+        # owner never saw, so throw it away instead of building the next request on it.
+        if result.status in (Status.UNRESOLVED, Status.MAX_ITERATIONS):
+            output(
+                "This attempt was discarded and nothing was saved. Your saved schedule "
+                "is unchanged (type /plan to see it)."
+            )
+            agent = None
+            continue
+        # Otherwise the agent is asking a question (or the model/API had a problem).
+        # It keeps its conversation and draft, so whatever the user types next
+        # continues it. /new throws the draft away and starts fresh.
 
 
 def minutes_arg(text: str) -> int:

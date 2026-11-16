@@ -13,7 +13,7 @@ The scheduling backend, [pawpal_system.py](pawpal_system.py), is **unchanged**. 
 | `agent/` | The plan → act → check loop, the tool whitelist, the verifier and the LLM clients |
 | `main.py` | A CLI with a human-approval step |
 | `eval/` | A reliability harness with 13 cases that runs offline or against the real model |
-| `tests/` | 140 automated tests (about 1 second, no network) |
+| `tests/` | 144 automated tests (about 1 second, no network) |
 
 The original Streamlit UI (`app.py`) still runs the old manual flow and is not connected to the agent.
 
@@ -84,12 +84,12 @@ python main.py --request "Rex needs a 30 minute walk every morning"
 python main.py --morning 90 --evening 60 --request "..."   # set free minutes (default 60 each)
 ```
 
-In interactive mode, type a request, then answer `y` (save), `n` (discard) or `r` (revise). Commands: `/state`, `/new`, `/help`, `/quit`. `--auto-approve` skips the prompt and is meant for scripted demos only.
+In interactive mode, type a request, then answer `y` (save), `n` (discard) or `r` (revise). Commands: `/plan` (today's plan from your saved tasks, with minutes used per block, no model call), `/state`, `/new`, `/help`, `/quit`. `--auto-approve` skips the prompt and is meant for scripted demos only.
 
 **No API key?** These need none:
 
 ```bash
-python -m pytest                      # 140 tests
+python -m pytest                      # 144 tests
 python -m eval.run_eval               # reliability harness, scripted mock model
 python demo_trace.py                  # prints every loop step for a scripted scenario
 ```
@@ -122,8 +122,8 @@ Approve this plan? [y]es / [n]o, discard / [r]evise: y
 Plan approved and saved.
 
 Rex (dog):
-  - Walk: 30 min, medium priority, morning at 08:00, daily, due 2026-11-15
-  - Bath: 30 min, medium priority, morning at 08:30, daily, due 2026-11-15
+  - Walk: 30 min, medium priority, prefers morning at 08:00, daily, due 2026-11-15
+  - Bath: 30 min, medium priority, prefers morning at 08:30, daily, due 2026-11-15
 ```
 
 ### 2. An impossible request is not forced through
@@ -175,7 +175,7 @@ For a step-by-step view of the loop, run `python demo_trace.py`. It shows each p
 
 ## Testing summary
 
-**140 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
+**144 automated tests pass** (`python -m pytest`, about 1 second, no network): 24 for the original scheduler, plus the tool executor, the agent loop, the Gemini client (with a faked SDK), the verifier, the CLI and the eval harness itself.
 
 **Reliability harness:** 13 cases, each judged on the same six rules: it ends in an allowed status, the real data is untouched, no pet disappears, a READY plan passed the verifier, a READY plan keeps every stated duration, and the loop stays under its cap.
 
@@ -213,7 +213,7 @@ eval/
 - results_live.md
 
 tests/
-- 140 tests
+- 144 tests
 
 diagrams/
 - architecture.mmd

@@ -163,7 +163,7 @@ def test_ctrl_d_ends_the_session_cleanly(owner):
 def test_describe_owner_lists_tasks(owner):
     run(owner, good_plan_script(), ["walk Rex", "y", "/quit"])
     text = describe_owner(owner)
-    assert "walk: 30 min, high priority, morning, daily" in text
+    assert "walk: 30 min, high priority, prefers morning, daily" in text
     assert "morning: 60" in text
 
 
@@ -277,3 +277,53 @@ def test_review_screen_hides_the_draft_when_not_ready():
     asking = AgentResult(status=Status.NEEDS_INPUT, message="Which time?", iterations=1)
     show_result(asking, lines.append, draft=Owner(name="Sam", constraints={}))
     assert "What approving will save" not in "\n".join(lines)
+
+
+# ------------------------------------------------- /plan and what you see after saving
+
+
+def test_plan_command_shows_minutes_used_from_saved_tasks(owner):
+    first = good_plan_script()
+    code, user = run(owner, first, ["walk Rex", "y", "/plan", "/quit"])
+    # the last thing printed is the /plan output: 30 of the 60 morning minutes are used
+    assert "Morning (30/60 min used)" in user.printed[-1]
+    assert "Rex: walk" in user.printed[-1]
+
+
+def test_plan_command_makes_no_model_call_and_changes_nothing(owner):
+    llm = MockLLMClient([])
+    user = ScriptedUser(["/plan", "/quit"])
+    run_session(owner, llm, PLAN_DATE, input_fn=user.input, output=user.output)
+    assert llm.calls == []
+    assert owner.pets[0].tasks == []
+    assert "Morning (0/60 min used)" in user.transcript
+
+
+def test_approval_shows_the_current_plan_and_saved_tasks(owner):
+    code, user = run(owner, good_plan_script(), ["walk Rex", "y", "/quit"])
+    after = user.transcript.split("Plan approved and saved.")[1]
+    assert "Morning (30/60 min used)" in after  # how much time is left
+    assert "prefers morning" in after  # what was saved
+
+
+def test_failed_attempt_is_discarded_so_the_next_request_starts_clean(owner):
+    # Two overlapping walks the model never fixes -> UNRESOLVED, with edits in the draft.
+    overlap = [
+        tool_use_response(
+            ("create_task", walk(name="a", start_time="08:00")),
+            ("create_task", walk(name="b", start_time="08:10")),
+            ("generate_plan", {}),
+        )
+    ]
+    stubborn = [text_response("I can't fix that.")] * 3
+    script = overlap + stubborn + good_plan_script()
+    code, user = run(owner, script, ["two overlapping walks", "walk Rex", "y", "/quit"])
+
+    assert "attempt was discarded" in user.transcript
+    # the second request began from a fresh draft: only its own walk was saved
+    names = []
+    for task in owner.pets[0].tasks:
+        names.append(task.name)
+    assert names == ["walk"]
+    # and the prompt went back to a new request, not "reply to the agent"
+    assert user.prompts[1] == "You> "
