@@ -269,3 +269,19 @@ def test_generate_plan_rejects_a_bad_date(executor):
     result = executor.execute("generate_plan", {"plan_date": "tomorrow"})
     assert not result.ok
     assert "YYYY-MM-DD" in result.content
+
+
+# ------------------------------------------------------- species is required
+
+
+def test_add_pet_requires_a_species(executor):
+    result = executor.execute("add_pet", {"name": "Mia"})
+    assert not result.ok
+    assert "species" in result.content
+    assert len(executor.draft.pets) == 1  # nothing was added (only Rex)
+
+
+def test_system_prompt_tells_the_model_to_ask_for_species():
+    from agent.agent import build_system_prompt
+
+    assert "species" in build_system_prompt(PLAN_DATE)

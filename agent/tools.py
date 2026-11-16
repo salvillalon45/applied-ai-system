@@ -49,11 +49,11 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                 "name": {"type": "string", "maxLength": MAX_TEXT_LENGTH},
                 "species": {
                     "type": "string",
-                    "description": "e.g. dog, cat, other. Defaults to other.",
+                    "description": "e.g. dog, cat, snake. Required: if the owner has not said, ask them.",
                     "maxLength": MAX_TEXT_LENGTH,
                 },
             },
-            "required": ["name"],
+            "required": ["name", "species"],
         },
     },
     {
@@ -301,7 +301,7 @@ class ToolExecutor:
 
     def _add_pet(self, args: Dict[str, Any]) -> str:
         """Add a pet to the draft."""
-        pet = Pet(name=args["name"], species=args.get("species", "other"))
+        pet = Pet(name=args["name"], species=args["species"])
         self.draft.add_pet(pet)
         self._mark_changed()
         return f"added pet {pet.name!r} ({pet.species})"

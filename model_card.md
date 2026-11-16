@@ -15,7 +15,7 @@
 
 **The model is not deterministic.** Two runs of the same request made different choices: one run shortened a 30-minute bath to 15 minutes, a later one shifted its start time instead. The system prompt reduces this but cannot guarantee it. The approval step is the backstop.
 
-**It makes judgment calls the owner didn't state.** Asked "Walk Rex." with no duration, the live model guessed one instead of asking. It also picked "medium" priority when none was given. My eval accepts either behavior for that case, so it passes, but the guess is still a limitation.
+**It makes judgment calls the owner didn't state.** Asked "Walk Rex." with no duration, the live model guessed one instead of asking. It also picked "medium" priority when none was given. It does the same with a pet's species: `add_pet` first defaulted to "other", which then couldn't be changed. I made `species` a required argument and told the model to ask, but when I said only "I walk Ollie for an hour in the mornings" it filled in "dog" without asking. Requiring the field removed the bad default, but not the guess. The review screen shows `Ollie (dog)` so a wrong guess can be caught. My eval accepts either behavior for that case, so it passes, but the guess is still a limitation.
 
 **It guesses on contradictory or ambiguous requests instead of asking.** While testing the CLI by hand, I typed "In the morning, I want to also add a task where I bath him. This will be a weekly task. I bathed him in the evening for 30 minutes." The model scheduled the bath in the morning and never mentioned that my message named two times. An earlier request ("a walk in the morning and the afternoon. Actually in the evening...") had the same pattern: it kept only the evening walk. I added a system prompt rule to ask when a request contradicts itself, then re-ran the bath message twice. The model still didn't ask. Both runs picked evening and did not flag the conflict. So the prompt rule is not reliable, and a user could approve a wrong guess without noticing it.
 
@@ -63,7 +63,7 @@
 
 | Check | Result |
 |---|---|
-| Automated tests (offline, about 1 second) | 147 pass |
+| Automated tests (offline, about 1 second) | 149 pass |
 | Eval harness, offline mock | 13/13 pass |
 | Eval harness, live Gemini | 9/9 pass on the final run (one earlier run of the over-capacity case ended in an API error, and a rerun passed) |
 
