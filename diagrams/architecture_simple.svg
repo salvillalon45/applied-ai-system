@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="1600" height="600" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>PawPal+ Planning Agent: Plan, Act, Check, Approve</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b91c1c"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="600" fill="#ffffff"/>
+
+  <text x="800" y="42" text-anchor="middle" font-size="32" font-weight="700" fill="#0f172a">PawPal+ Planning Agent: Plan, Act, Check, Approve</text>
+
+  <!-- Feedback loop: verifier errors go back to the agent -->
+  <path d="M1160,250 L1160,120 L730,120 L730,150" fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#arrow-red)"/>
+  <text x="945" y="108" text-anchor="middle" font-size="20" font-weight="600" fill="#b91c1c">problem found: errors go back to the model to fix</text>
+
+  <!-- Owner -->
+  <rect x="30" y="250" width="160" height="100" rx="14" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+  <text x="110" y="292" text-anchor="middle" font-size="24" font-weight="700" fill="#1f2937">Owner</text>
+  <text x="110" y="320" text-anchor="middle" font-size="18" fill="#1f2937">types a plain-</text>
+  <text x="110" y="342" text-anchor="middle" font-size="18" fill="#1f2937">English request</text>
+
+  <!-- Guardrail -->
+  <rect x="245" y="250" width="160" height="100" rx="14" fill="#fecaca" stroke="#b91c1c" stroke-width="3"/>
+  <text x="325" y="292" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">Input check</text>
+  <text x="325" y="320" text-anchor="middle" font-size="18" fill="#1f2937">rejects empty or</text>
+  <text x="325" y="342" text-anchor="middle" font-size="18" fill="#1f2937">too-long input</text>
+
+  <!-- Agent container -->
+  <rect x="460" y="150" width="560" height="340" rx="18" fill="#ede9fe" stroke="#6d28d9" stroke-width="3"/>
+  <text x="740" y="190" text-anchor="middle" font-size="26" font-weight="700" fill="#4c1d95">AGENT</text>
+
+  <!-- LLM -->
+  <rect x="485" y="225" width="230" height="130" rx="14" fill="#bfdbfe" stroke="#1d4ed8" stroke-width="3"/>
+  <circle cx="515" cy="255" r="16" fill="#1d4ed8"/>
+  <text x="515" y="261" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">1</text>
+  <text x="610" y="262" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">PLAN</text>
+  <text x="600" y="296" text-anchor="middle" font-size="19" font-weight="600" fill="#1f2937">LLM (Gemini)</text>
+  <text x="600" y="322" text-anchor="middle" font-size="17" fill="#1f2937">chooses which tool</text>
+  <text x="600" y="344" text-anchor="middle" font-size="17" fill="#1f2937">to call next</text>
+
+  <!-- Tools -->
+  <rect x="765" y="225" width="230" height="130" rx="14" fill="#ffffff" stroke="#6d28d9" stroke-width="3"/>
+  <circle cx="795" cy="255" r="16" fill="#6d28d9"/>
+  <text x="795" y="261" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">2</text>
+  <text x="890" y="262" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">ACT</text>
+  <text x="880" y="296" text-anchor="middle" font-size="19" font-weight="600" fill="#1f2937">Whitelisted tools</text>
+  <text x="880" y="322" text-anchor="middle" font-size="17" fill="#1f2937">only 6 tools allowed,</text>
+  <text x="880" y="344" text-anchor="middle" font-size="17" fill="#1f2937">no delete tool</text>
+
+  <!-- LLM <-> tools -->
+  <line x1="715" y1="275" x2="765" y2="275" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="765" y1="320" x2="715" y2="320" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <text x="740" y="396" text-anchor="middle" font-size="19" fill="#4c1d95">Repeats until the plan is clean (capped at 10 model calls)</text>
+  <text x="740" y="430" text-anchor="middle" font-size="19" font-weight="700" fill="#4c1d95">All edits happen on a draft copy of your data</text>
+  <text x="740" y="462" text-anchor="middle" font-size="17" fill="#4c1d95">Your real schedule is untouched until you approve</text>
+
+  <!-- Verifier -->
+  <rect x="1060" y="250" width="200" height="100" rx="14" fill="#fecaca" stroke="#b91c1c" stroke-width="3"/>
+  <circle cx="1090" cy="278" r="16" fill="#b91c1c"/>
+  <text x="1090" y="284" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">3</text>
+  <text x="1175" y="285" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">CHECK</text>
+  <text x="1160" y="313" text-anchor="middle" font-size="17" font-weight="600" fill="#1f2937">Verifier: plain code,</text>
+  <text x="1160" y="335" text-anchor="middle" font-size="17" fill="#1f2937">no AI, finds conflicts</text>
+
+  <!-- Human approval -->
+  <rect x="1320" y="230" width="250" height="140" rx="14" fill="#fde68a" stroke="#b45309" stroke-width="3"/>
+  <circle cx="1350" cy="260" r="16" fill="#b45309"/>
+  <text x="1350" y="266" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">4</text>
+  <text x="1455" y="267" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2937">APPROVE</text>
+  <text x="1445" y="304" text-anchor="middle" font-size="18" font-weight="600" fill="#1f2937">Proposed plan shown</text>
+  <text x="1445" y="328" text-anchor="middle" font-size="18" fill="#1f2937">to you: y = save,</text>
+  <text x="1445" y="352" text-anchor="middle" font-size="18" fill="#1f2937">n = discard, r = revise</text>
+
+  <!-- Saved -->
+  <rect x="1320" y="450" width="250" height="80" rx="14" fill="#bbf7d0" stroke="#15803d" stroke-width="3"/>
+  <text x="1445" y="486" text-anchor="middle" font-size="21" font-weight="700" fill="#1f2937">Saved to your schedule</text>
+  <text x="1445" y="512" text-anchor="middle" font-size="17" fill="#1f2937">only after you say yes</text>
+
+  <!-- Main flow arrows -->
+  <line x1="190" y1="300" x2="245" y2="300" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="405" y1="300" x2="460" y2="300" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="1020" y1="300" x2="1060" y2="300" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="1260" y1="300" x2="1320" y2="300" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1290" y="284" text-anchor="middle" font-size="17" font-weight="600" fill="#15803d">valid</text>
+  <line x1="1445" y1="370" x2="1445" y2="450" stroke="#334155" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1458" y="416" font-size="17" font-weight="600" fill="#15803d">y</text>
+</svg>
