@@ -308,3 +308,17 @@ def test_planning_agent_runs_end_to_end_on_the_gemini_client():
     assert len(sdk.models.requests[2]["contents"]) == 5
     agent.commit()
     assert owner.pets[0].tasks[0].name == "walk"
+
+
+# ------------------------------------------------------- slow or throttled calls are logged
+
+
+def test_retries_are_logged_with_the_status_code(monkeypatch, caplog):
+    monkeypatch.setattr("agent.llm.time.sleep", lambda seconds: None)
+    client, _ = make_client(
+        [api_error(503), reply([text_part("ok")])], retry_delays=(2, 6)
+    )
+    with caplog.at_level("WARNING", logger="pawpal.agent"):
+        client.complete("sys", [{"role": "user", "content": "hi"}], TOOL_SCHEMAS)
+    assert "returned 503" in caplog.text
+    assert "retry 1 of 2" in caplog.text

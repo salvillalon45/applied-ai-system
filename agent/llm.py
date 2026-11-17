@@ -15,6 +15,7 @@ its own provider's format.
 """
 
 import itertools
+import logging
 import os
 import time
 from abc import ABC, abstractmethod
@@ -27,6 +28,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
+
+logger = logging.getLogger("pawpal.agent")
 
 DEFAULT_MODEL = "claude-opus-5-5"  # override with the PAWPAL_MODEL env var
 DEFAULT_EFFORT = "medium"  # low | medium | high | xhigh | max
@@ -267,6 +270,11 @@ class GeminiClient(LLMClient):
             except genai_errors.APIError as error:
                 retryable = error.code in (429, 500, 503)
                 if retryable and attempt < len(self.retry_delays):
+                    logger.warning(
+                        "Gemini returned %s; waiting %ss before retry %d of %d",
+                        error.code, self.retry_delays[attempt], attempt + 1,
+                        len(self.retry_delays),
+                    )
                     time.sleep(self.retry_delays[attempt])
                     attempt += 1
                     continue

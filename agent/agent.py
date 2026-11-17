@@ -16,6 +16,7 @@ Every run is capped at max_iterations model calls so it can never loop forever.
 
 import copy
 import logging
+import time
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
@@ -180,16 +181,18 @@ class PlanningAgent:
         for iteration in range(1, self.max_iterations + 1):
             # STEP 2: PLAN - send the whole conversation to Claude. It replies with
             # either tool calls (things it wants done) or plain text (it's finished).
+            started = time.monotonic()
             try:
                 response = self.llm.complete(self.system_prompt, self.messages, TOOL_SCHEMAS)
             except LLMError as error:
                 logger.error("llm error on call %d: %s", iteration, error)
                 return self._finish(Status.LLM_ERROR, str(error), iteration)
+            seconds = time.monotonic() - started  # how long we waited on the API
 
             logger.info(
-                "llm call %d: stop=%s tools=%d tokens in=%d out=%d",
+                "llm call %d: stop=%s tools=%d tokens in=%d out=%d took=%.1fs",
                 iteration, response.stop_reason, len(response.tool_calls),
-                response.input_tokens, response.output_tokens,
+                response.input_tokens, response.output_tokens, seconds,
             )
             self.messages.append({"role": "assistant", "content": response.content})
             if response.text:
